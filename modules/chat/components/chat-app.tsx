@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { MoreHorizontalIcon, PlusIcon, SendIcon } from "lucide-react";
+
 import {
-  useConversations,
-  useCreateConversation,
-  useDeleteConversation,
-  useUpdateConversation,
-} from "@/modules/conversations/hooks/useConversations";
+  createConversation,
+  deleteConversation,
+  updateConversation,
+} from "@/modules/conversations/actions";
+import { useChatStream } from "@/modules/messages/hooks/use-chat-stream";
+
 import {
-  useCreateMessage,
-  useDeleteMessage,
-  useMessages,
-  useUpdateMessage,
-} from "@/modules/messages/hooks/useMessages";
+  deleteMessage,
+  updateMessage,
+} from "@/modules/messages/actions";
 import { signOutAction } from "@/modules/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,32 +43,37 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useConversations } from "@/modules/conversations/hooks/useConversations";
+import { useMessages } from "@/modules/messages/hooks/useMessages";
 
 export function ChatApp() {
-  const { data: conversations = [] } = useConversations();
-  const createConversation = useCreateConversation();
-  const updateConversation = useUpdateConversation();
-  const deleteConversation = useDeleteConversation();
+  const { data: conversations = [], refetch: refetchConversations } =
+    useConversations();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
-  useEffect(() => {
-    if (conversations.length && !selectedId) {
-      setSelectedId(conversations[0].id);
-    }
-  }, [conversations, selectedId]);
+  const activeId =
+    selectedId && conversations.some((conversation) => conversation.id === selectedId)
+      ? selectedId
+      : (conversations[0]?.id ?? null);
 
-  useEffect(() => {
-    if (selectedId && !conversations.find((c) => c.id === selectedId)) {
-      setSelectedId(conversations[0]?.id ?? null);
-    }
-  }, [conversations, selectedId]);
+  const selectedConversation = conversations.find(
+    (conversation) => conversation.id === activeId,
+  );
 
   async function handleNewChat() {
-    const conversation = await createConversation.mutateAsync("New chat");
-    setSelectedId(conversation.id);
+    setIsCreating(true);
+
+    try {
+      const conversation = await createConversation("New chat");
+      setSelectedId(conversation.id);
+      await refetchConversations();
+    } finally {
+      setIsCreating(false);
+    }
   }
 
   function openRename(id: string, title: string) {
@@ -78,15 +83,21 @@ export function ChatApp() {
 
   async function handleRename() {
     if (!renameId) return;
-    await updateConversation.mutateAsync({ id: renameId, title: renameTitle });
+
+    await updateConversation(renameId, renameTitle);
     setRenameId(null);
+    await refetchConversations();
   }
 
   async function handleDelete(id: string) {
-    await deleteConversation.mutateAsync(id);
-  }
+    await deleteConversation(id);
 
-  const selectedConversation = conversations.find((c) => c.id === selectedId);
+    if (selectedId === id) {
+      setSelectedId(null);
+    }
+
+    await refetchConversations();
+  }
 
   return (
     <div className="flex h-svh min-h-0 bg-background">
@@ -104,7 +115,7 @@ export function ChatApp() {
           <Button
             className="w-full"
             onClick={handleNewChat}
-            disabled={createConversation.isPending}
+            disabled={isCreating}
           >
             <PlusIcon />
             New chat
@@ -117,7 +128,7 @@ export function ChatApp() {
               key={conversation.id}
               className={cn(
                 "group flex items-center gap-1 rounded-xl",
-                selectedId === conversation.id && "bg-muted"
+                activeId === conversation.id && "bg-muted",
               )}
             >
               <button
@@ -165,6 +176,7 @@ export function ChatApp() {
           <ChatMessages
             conversationId={selectedConversation.id}
             title={selectedConversation.title}
+            onConversationChange={refetchConversations}
           />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-8 text-center">
@@ -172,11 +184,7 @@ export function ChatApp() {
             <p className="max-w-sm text-sm text-muted-foreground">
               Create a new chat to begin messaging.
             </p>
-            <Button
-              className="mt-2"
-              onClick={handleNewChat}
-              disabled={createConversation.isPending}
-            >
+            <Button className="mt-2" onClick={handleNewChat} disabled={isCreating}>
               <PlusIcon />
               New chat
             </Button>
@@ -205,29 +213,46 @@ export function ChatApp() {
 function ChatMessages({
   conversationId,
   title,
+  onConversationChange,
 }: {
   conversationId: string;
   title: string;
+  onConversationChange: () => Promise<unknown>;
 }) {
-  const { data: messages = [] } = useMessages(conversationId);
-  const createMessage = useCreateMessage();
-  const updateMessage = useUpdateMessage();
-  const deleteMessage = useDeleteMessage();
+  const { data: messages = [], refetch: refetchMessages } =
+    useMessages(conversationId);
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  function scrollToBottom() {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  async function refreshMessages() {
+    await Promise.all([refetchMessages(), onConversationChange()]);
+  }
+
+  const { sendMessage, isStreaming, streamingContent } =
+    useChatStream(refreshMessages);
+
   const [content, setContent] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!content) return;
+    if (!content.trim() || isStreaming) return;
 
-    await createMessage.mutateAsync({ conversationId, content });
+    const message = content.trim();
     setContent("");
+
+    await sendMessage({
+      conversationId,
+      content: message,
+      onChunk: scrollToBottom,
+    });
+
+    scrollToBottom();
   }
 
   function openEdit(id: string, text: string) {
@@ -237,8 +262,15 @@ function ChatMessages({
 
   async function handleEditSave() {
     if (!editId) return;
-    await updateMessage.mutateAsync({ id: editId, content: editContent });
+
+    await updateMessage(editId, editContent);
     setEditId(null);
+    await refetchMessages();
+  }
+
+  async function handleDelete(id: string) {
+    await deleteMessage(id);
+    await refetchMessages();
   }
 
   return (
@@ -248,7 +280,7 @@ function ChatMessages({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        {messages.length === 0 ? (
+        {messages.length === 0 && !streamingContent ? (
           <p className="py-16 text-center text-sm text-muted-foreground">
             Send a message to start the chat
           </p>
@@ -267,13 +299,13 @@ function ChatMessages({
                     <MessageContent
                       className={cn(
                         "w-auto max-w-[80%] gap-1.5",
-                        isUser ? "ml-auto items-end" : "mr-auto items-start"
+                        isUser ? "ml-auto items-end" : "mr-auto items-start",
                       )}
                     >
                       <div
                         className={cn(
                           "flex items-center gap-1.5",
-                          isUser && "flex-row-reverse"
+                          isUser && "flex-row-reverse",
                         )}
                       >
                         <Bubble
@@ -306,9 +338,7 @@ function ChatMessages({
                             >
                               Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => deleteMessage.mutate(message.id)}
-                            >
+                            <DropdownMenuItem onClick={() => handleDelete(message.id)}>
                               Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -318,6 +348,18 @@ function ChatMessages({
                   </Message>
                 );
               })}
+
+              {streamingContent ? (
+                <Message align="start" className="w-full">
+                  <MessageContent className="mr-auto w-auto max-w-[80%] items-start gap-1.5">
+                    <Bubble variant="muted" align="start" className="max-w-full">
+                      <BubbleContent className="whitespace-pre-wrap text-sm leading-relaxed">
+                        {streamingContent}
+                      </BubbleContent>
+                    </Bubble>
+                  </MessageContent>
+                </Message>
+              ) : null}
             </MessageGroup>
             <div ref={bottomRef} />
           </div>
@@ -332,6 +374,7 @@ function ChatMessages({
             placeholder="Send a message..."
             rows={1}
             className="min-h-10 py-3 text-sm"
+            disabled={isStreaming}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -340,7 +383,7 @@ function ChatMessages({
             }}
           />
           <InputGroupAddon align="inline-end" className="pr-2">
-            <InputGroupButton type="submit" size="icon-sm">
+            <InputGroupButton type="submit" size="icon-sm" disabled={isStreaming}>
               <SendIcon />
             </InputGroupButton>
           </InputGroupAddon>
