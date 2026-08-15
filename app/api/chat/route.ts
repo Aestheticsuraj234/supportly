@@ -4,9 +4,10 @@ import prisma from "@/lib/db";
 import { runStreamingSupportChat } from "@/modules/ai/run-streaming-chat";
 
 const streamHeaders = {
-    "Content-Type": "text/plain; charset=utf-8",
+    "Content-Type": "application/x-ndjson; charset=utf-8",
     "Cache-Control": "no-cache",
-}
+};
+
 
 export async function POST(request: Request) {
     const session = await auth.api.getSession({
@@ -38,7 +39,12 @@ export async function POST(request: Request) {
         return new Response("Conversation not found", { status: 404 });
     }
 
-    const stream = await runStreamingSupportChat(conversationId, content);
+    const stream = await runStreamingSupportChat(conversationId, content, {
+        userId: session.user.id,
+        userEmail: session.user.email,
+        userName: session.user.name,
+        conversationId,
+    });
 
     return new Response(stream, { headers: streamHeaders });
 }

@@ -2,14 +2,14 @@
 
 import { useRef, useState } from "react";
 import { MoreHorizontalIcon, PlusIcon, SendIcon } from "lucide-react";
-
+import { useConversations } from "@/modules/conversations/hooks/useConversations";
 import {
   createConversation,
   deleteConversation,
   updateConversation,
 } from "@/modules/conversations/actions";
 import { useChatStream } from "@/modules/messages/hooks/use-chat-stream";
-
+import { useMessages } from "@/modules/messages/hooks/useMessages";
 import {
   deleteMessage,
   updateMessage,
@@ -18,6 +18,8 @@ import { signOutAction } from "@/modules/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { MarkdownMessage } from "@/components/ui/markdown-message";
+import { ToolBadgeList } from "@/components/ui/tool-badge";
 import {
   Message,
   MessageContent,
@@ -43,8 +45,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useConversations } from "@/modules/conversations/hooks/useConversations";
-import { useMessages } from "@/modules/messages/hooks/useMessages";
 
 export function ChatApp() {
   const { data: conversations = [], refetch: refetchConversations } =
@@ -232,8 +232,13 @@ function ChatMessages({
     await Promise.all([refetchMessages(), onConversationChange()]);
   }
 
-  const { sendMessage, isStreaming, streamingContent } =
-    useChatStream(refreshMessages);
+  const {
+    sendMessage,
+    isStreaming,
+    streamingContent,
+    streamingAgentName,
+    streamingTools,
+  } = useChatStream(refreshMessages);
 
   const [content, setContent] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
@@ -280,7 +285,7 @@ function ChatMessages({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        {messages.length === 0 && !streamingContent ? (
+        {messages.length === 0 && !isStreaming ? (
           <p className="py-16 text-center text-sm text-muted-foreground">
             Send a message to start the chat
           </p>
@@ -302,6 +307,12 @@ function ChatMessages({
                         isUser ? "ml-auto items-end" : "mr-auto items-start",
                       )}
                     >
+                      {!isUser && message.agentName ? (
+                        <AgentBadge name={message.agentName} />
+                      ) : null}
+                      {!isUser ? (
+                        <ToolBadgeList tools={message.toolsUsed} />
+                      ) : null}
                       <div
                         className={cn(
                           "flex items-center gap-1.5",
@@ -313,8 +324,14 @@ function ChatMessages({
                           align={isUser ? "end" : "start"}
                           className="max-w-full"
                         >
-                          <BubbleContent className="whitespace-pre-wrap text-sm leading-relaxed">
-                            {message.content}
+                          <BubbleContent className="text-sm leading-relaxed">
+                            {isUser ? (
+                              <span className="whitespace-pre-wrap">
+                                {message.content}
+                              </span>
+                            ) : (
+                              <MarkdownMessage content={message.content} />
+                            )}
                           </BubbleContent>
                         </Bubble>
 
@@ -338,7 +355,9 @@ function ChatMessages({
                             >
                               Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDelete(message.id)}>
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(message.id)}
+                            >
                               Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -349,14 +368,25 @@ function ChatMessages({
                 );
               })}
 
-              {streamingContent ? (
+              {isStreaming ? (
                 <Message align="start" className="w-full">
                   <MessageContent className="mr-auto w-auto max-w-[80%] items-start gap-1.5">
-                    <Bubble variant="muted" align="start" className="max-w-full">
-                      <BubbleContent className="whitespace-pre-wrap text-sm leading-relaxed">
-                        {streamingContent}
-                      </BubbleContent>
-                    </Bubble>
+                    {streamingAgentName ? (
+                      <AgentBadge name={streamingAgentName} />
+                    ) : null}
+                    <ToolBadgeList tools={streamingTools} />
+                    {streamingContent ? (
+                      <Bubble variant="muted" align="start" className="max-w-full">
+                        <BubbleContent className="text-sm leading-relaxed">
+                          <MarkdownMessage
+                            content={streamingContent}
+                            isAnimating
+                          />
+                        </BubbleContent>
+                      </Bubble>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Thinking…</p>
+                    )}
                   </MessageContent>
                 </Message>
               ) : null}
@@ -408,5 +438,11 @@ function ChatMessages({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function AgentBadge({ name }: { name: string }) {
+  return (
+    <span className="text-xs font-medium text-muted-foreground">{name}</span>
   );
 }
