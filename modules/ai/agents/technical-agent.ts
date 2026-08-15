@@ -2,7 +2,10 @@ import { Agent } from "@openai/agents";
 import type { SupportContext } from "../context";
 import { withhandoffPrompt } from "../prompts";
 import { technicalTools } from "../tools/technical-tools";
-
+import {
+    createInputGuardrail,
+    createOutputGuardrail,
+  } from "../guardrails";
 export const technicalAgent = new Agent<SupportContext>({
     name: "Technical Agent",
     handoffDescription:
@@ -13,4 +16,6 @@ export const technicalAgent = new Agent<SupportContext>({
         Keep replies concise and friendly.`),
     model: "gpt-4o-mini",
     tools: technicalTools,
+    inputGuardrails: [createInputGuardrail("Technical Agent")],
+    outputGuardrails: [createOutputGuardrail("Technical Agent")]
 })

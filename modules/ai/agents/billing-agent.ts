@@ -2,7 +2,10 @@ import { Agent } from "@openai/agents";
 import type { SupportContext } from "../context";
 import { withhandoffPrompt } from "../prompts";
 import { billingTools } from "../tools/billing-tools";
-
+import {
+    createInputGuardrail,
+    createOutputGuardrail,
+  } from "../guardrails";   
 export const billingAgent = new Agent<SupportContext>({
     name: "Billing Agent",
     handoffDescription:
@@ -13,4 +16,6 @@ export const billingAgent = new Agent<SupportContext>({
         Keep replies concise and friendly.`),
     model: "gpt-4o-mini",
     tools: billingTools,
+    inputGuardrails: [createInputGuardrail("Billing Agent")],
+    outputGuardrails: [createOutputGuardrail("Billing Agent")]
 })

@@ -2,6 +2,10 @@ import { Agent } from "@openai/agents";
 import type { SupportContext } from "../context";
 import { withhandoffPrompt } from "../prompts";
 import { shippingTools } from "../tools/shipping-tools";
+import {
+    createInputGuardrail,
+    createOutputGuardrail,
+  } from "../guardrails";
 
 export const shippingAgent = new Agent<SupportContext>({
     name: "Shipping Agent",
@@ -13,4 +17,6 @@ Use your tools to look up order data before answering.
 Keep replies concise and friendly.`),
     model: "gpt-4o-mini",
     tools: shippingTools,
+    inputGuardrails: [createInputGuardrail("Shipping Agent")],
+    outputGuardrails: [createOutputGuardrail("Shipping Agent")]
 })

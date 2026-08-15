@@ -3,7 +3,10 @@ import { withhandoffPrompt } from "../prompts";
 import { billingAgent } from "./billing-agent";
 import { shippingAgent } from "./shipping-agent";
 import { technicalAgent } from "./technical-agent";
-
+import {
+    createInputGuardrail,
+    createOutputGuardrail,
+} from "../guardrails";
 
 export const triageAgent = Agent.create({
     name: "Support Triage Agent",
@@ -19,5 +22,9 @@ For simple greetings or general questions you can handle yourself.
 Always be friendly and concise.
         `),
     model: "gpt-4o-mini",
-    handoffs: [billingAgent, shippingAgent, technicalAgent]
+    handoffs: [billingAgent, shippingAgent, technicalAgent],
+
+    inputGuardrails: [createInputGuardrail("Support Triage")],
+    // Output guardrails run if Triage answers directly (no handoff).
+    outputGuardrails: [createOutputGuardrail("Support Triage")],
 })
