@@ -29,6 +29,7 @@ model User {
   updatedAt     DateTime  @updatedAt
   sessions      Session[]
   accounts      Account[]
+  conversations Conversation[]
 
   @@unique([email])
   @@map("user")
@@ -80,4 +81,35 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+
+model Conversation {
+  id String @id @default(cuid())
+  title String
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("conversation") 
+}
+
+enum MESSAGE_ROLE {
+  USER
+  ASSISTANT
+}
+
+model Message {
+  id String @id @default(cuid())
+  content String
+  role MESSAGE_ROLE @default(USER)
+  conversationId String
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("message")
 }
