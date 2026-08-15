@@ -1,12 +1,11 @@
 import { tool } from "@openai/agents";
 import { z } from "zod";
 import type { SupportContext } from "../context";
+import { searchKnowledgeBase } from "../data/mock-store";
 import {
-  createTicketForUser,
-  getTicketForUser,
+  getTicketByIdForUser,
   getTicketsForUser,
-  searchKnowledgeBase,
-} from "../data/mock-store";
+} from "@/modules/tickets/actions";
 
 export const searchKb = tool<
   z.ZodObject<{ query: z.ZodString }>,
@@ -33,39 +32,21 @@ export const getTicketStatus = tool<
   SupportContext
 >({
   name: "get_ticket_status",
-  description: "Look up a support ticket by ID.",
+  description: "Look up a human support ticket by ID for the current user.",
   parameters: z.object({
-    ticketId: z.string().describe("The ticket ID, e.g. TKT-501"),
+    ticketId: z.string().describe("The ticket ID"),
   }),
   execute: async ({ ticketId }, context) => {
     const userId = context?.context.userId ?? "";
-    const ticket = getTicketForUser(userId, ticketId);
+    const ticket = await getTicketByIdForUser(ticketId, userId);
 
     if (!ticket) {
-      const openTickets = getTicketsForUser(userId);
-      return `Ticket ${ticketId} not found. Open tickets: ${JSON.stringify(openTickets)}`;
+      const openTickets = await getTicketsForUser(userId);
+      return `Ticket ${ticketId} not found. Your tickets: ${JSON.stringify(openTickets, null, 2)}`;
     }
 
     return JSON.stringify(ticket, null, 2);
   },
 });
 
-export const createSupportTicket = tool<
-  z.ZodObject<{ subject: z.ZodString; description: z.ZodString }>,
-  SupportContext
->({
-  name: "create_support_ticket",
-  description: "Create a new technical support ticket.",
-  parameters: z.object({
-    subject: z.string().describe("Short summary of the issue"),
-    description: z.string().describe("Detailed description of the problem"),
-  }),
-  execute: async ({ subject, description }, context) => {
-    const userId = context?.context.userId ?? "";
-    const result = createTicketForUser(userId, subject, description);
-
-    return result.message;
-  },
-});
-
-export const technicalTools = [searchKb, getTicketStatus, createSupportTicket];
+export const technicalTools = [searchKb, getTicketStatus];

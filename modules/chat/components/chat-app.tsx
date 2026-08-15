@@ -14,9 +14,11 @@ import {
   deleteMessage,
   updateMessage,
 } from "@/modules/messages/actions";
+import { useOpenTicket } from "@/modules/tickets/hooks/use-open-ticket";
 import { signOutAction } from "@/modules/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import Link from "next/link";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { ToolBadgeList } from "@/components/ui/tool-badge";
@@ -46,7 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-export function ChatApp() {
+export function ChatApp({ isAdmin = false }: { isAdmin?: boolean }) {
   const { data: conversations = [], refetch: refetchConversations } =
     useConversations();
 
@@ -104,11 +106,26 @@ export function ChatApp() {
       <aside className="flex w-72 shrink-0 flex-col border-r">
         <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
           <h1 className="text-base font-semibold tracking-tight">Supportly</h1>
-          <form action={signOutAction}>
-            <Button type="submit" variant="ghost" size="sm" className="text-muted-foreground">
-              Sign out
-            </Button>
-          </form>
+          <div className="flex items-center gap-2">
+            {isAdmin ? (
+              <Link
+                href="/admin/tickets"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Tickets
+              </Link>
+            ) : null}
+            <form action={signOutAction}>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+              >
+                Sign out
+              </Button>
+            </form>
+          </div>
         </div>
 
         <div className="px-4 py-4">
@@ -221,6 +238,8 @@ function ChatMessages({
 }) {
   const { data: messages = [], refetch: refetchMessages } =
     useMessages(conversationId);
+  const { data: openTicket } = useOpenTicket(conversationId);
+  const isEscalated = !!openTicket;
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -238,6 +257,7 @@ function ChatMessages({
     streamingContent,
     streamingAgentName,
     streamingTools,
+    lockedNotice,
   } = useChatStream(refreshMessages);
 
   const [content, setContent] = useState("");
@@ -246,7 +266,7 @@ function ChatMessages({
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!content.trim() || isStreaming) return;
+    if (!content.trim() || isStreaming || isEscalated) return;
 
     const message = content.trim();
     setContent("");
@@ -390,35 +410,66 @@ function ChatMessages({
                   </MessageContent>
                 </Message>
               ) : null}
+
+              {lockedNotice && !isStreaming ? (
+                <Message align="start" className="w-full">
+                  <MessageContent className="mr-auto w-auto max-w-[80%] items-start gap-1.5">
+                    <AgentBadge name="Human Support" />
+                    <Bubble variant="muted" align="start" className="max-w-full">
+                      <BubbleContent className="text-sm leading-relaxed">
+                        <MarkdownMessage content={lockedNotice} />
+                      </BubbleContent>
+                    </Bubble>
+                  </MessageContent>
+                </Message>
+              ) : null}
             </MessageGroup>
             <div ref={bottomRef} />
           </div>
         )}
       </div>
 
-      <form onSubmit={handleSend} className="border-t px-6 py-5">
-        <InputGroup className="mx-auto max-w-3xl has-[textarea]:h-auto">
-          <InputGroupTextarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Send a message..."
-            rows={1}
-            className="min-h-10 py-3 text-sm"
-            disabled={isStreaming}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                e.currentTarget.form?.requestSubmit();
-              }
-            }}
-          />
-          <InputGroupAddon align="inline-end" className="pr-2">
-            <InputGroupButton type="submit" size="icon-sm" disabled={isStreaming}>
-              <SendIcon />
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-      </form>
+      {isEscalated ? (
+        <div className="border-t px-6 py-5">
+          <div className="mx-auto max-w-3xl rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
+            This conversation is with human support now. AI replies are turned
+            off until the ticket is resolved.
+            {openTicket ? (
+              <span className="mt-1 block text-xs">
+                Ticket: {openTicket.id} · Priority: {openTicket.priority}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleSend} className="border-t px-6 py-5">
+          <InputGroup className="mx-auto max-w-3xl has-[textarea]:h-auto">
+            <InputGroupTextarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Send a message..."
+              rows={1}
+              className="min-h-10 py-3 text-sm"
+              disabled={isStreaming}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
+            />
+            <InputGroupAddon align="inline-end" className="pr-2">
+              <InputGroupButton
+                type="submit"
+                size="icon-sm"
+                disabled={isStreaming}
+              >
+                <SendIcon />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+        </form>
+      )}
 
       <Dialog open={!!editId} onOpenChange={() => setEditId(null)}>
         <DialogContent>

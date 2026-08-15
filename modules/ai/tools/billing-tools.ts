@@ -6,6 +6,7 @@ import {
     getInvoicesForUser,
     requestRefundForUser,
 } from "../data/mock-store";
+import { createHumanEscalationTicket } from "./escalation-tools";
 
 
 export const getInvoices = tool<z.ZodObject<{}>, SupportContext>({
@@ -60,4 +61,4 @@ export const requestRefund = tool<
 });
 
 
-export const billingTools = [getInvoices, getInvoiceDetails, requestRefund];
+export const billingTools = [getInvoices, getInvoiceDetails, requestRefund , createHumanEscalationTicket];

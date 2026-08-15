@@ -14,26 +14,26 @@ export async function getCurrentUser() {
   return session?.user ?? null;
 }
 
-// /** Returns the current user plus their database role (USER / ADMIN). */
-// export async function getCurrentUserWithRole() {
-//   const session = await auth.api.getSession({
-//     headers: await headers(),
-//   });
+/** Returns the current user plus their database role (USER / ADMIN). */
+export async function getCurrentUserWithRole() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
 
-//   if (!session?.user) {
-//     return null;
-//   }
+  if (!session?.user) {
+    return null;
+  }
 
-//   const dbUser = await prisma.user.findUnique({
-//     where: { id: session.user.id },
-//     select: { role: true },
-//   });
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true },
+  });
 
-//   return {
-//     ...session.user,
-//     role: dbUser?.role ?? "USER",
-//   };
-// }
+  return {
+    ...session.user,
+    role: dbUser?.role ?? "USER",
+  };
+}
 
 export async function requireAuth() {
   const session = await auth.api.getSession({

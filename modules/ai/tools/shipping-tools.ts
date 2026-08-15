@@ -41,4 +41,4 @@ export const getOrderStatus = tool<z.ZodObject<{}>, SupportContext>({
   },
 });
 
-export const shippingTools = [trackOrder, getOrderStatus];
+export const shippingTools = [trackOrder, getOrderStatus ];
